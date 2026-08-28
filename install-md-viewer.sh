@@ -11,7 +11,8 @@ maintain_path="${libexec_dir}/md-viewer-maintain"
 version_path="${data_dir}/md-viewer/version"
 desktop_path="${data_dir}/applications/md-viewer.desktop"
 topgrade_path="${config_dir}/topgrade.d/md-viewer.toml"
-mode="${1:-install}"
+mode="install"
+default_choice=""
 
 fail() {
     printf '%s\n' "$1" >&2
@@ -71,6 +72,8 @@ update_viewer() (
 
     tar --no-same-owner -xzf "${work_dir}/${asset}" -C "$work_dir"
     [[ -x "${work_dir}/md-viewer" ]] || fail "Das Release enthält kein ausführbares md-viewer-Programm."
+    [[ -f "${work_dir}/LICENSE" ]] || fail "Das Release enthält keine LICENSE-Datei."
+    [[ -f "${work_dir}/THIRD_PARTY_NOTICES" ]] || fail "Das Release enthält keine THIRD_PARTY_NOTICES-Datei."
 
     install -Dm755 "${work_dir}/md-viewer" "$binary_path"
     install -Dm644 "${work_dir}/LICENSE" "${data_dir}/licenses/md-viewer/LICENSE"
@@ -80,9 +83,10 @@ update_viewer() (
     printf 'md-viewer %s wurde installiert.\n' "$version"
 )
 
-install_desktop_integration() {
+install_desktop_integration() (
     local desktop_source
     desktop_source="$(mktemp)"
+    trap 'rm -f "$desktop_source"' EXIT
     cat > "$desktop_source" <<EOF
 [Desktop Entry]
 Name=Markdown Viewer
@@ -97,35 +101,98 @@ StartupNotify=false
 StartupWMClass=md-viewer
 EOF
     install -Dm644 "$desktop_source" "$desktop_path"
-    rm -f "$desktop_source"
 
     if command -v update-desktop-database >/dev/null 2>&1; then
         update-desktop-database "$(dirname "$desktop_path")" >/dev/null 2>&1 || true
     fi
 
     if command -v xdg-mime >/dev/null 2>&1; then
-        xdg-mime default md-viewer.desktop text/markdown
-        xdg-mime default md-viewer.desktop text/x-markdown
-    fi
-}
+        local make_default="$default_choice"
+        if [[ -z "$make_default" ]]; then
+            if [[ -t 0 ]]; then
+                local answer
+                read -r -p 'Markdown Viewer als Standardprogramm für Markdown-Dateien festlegen? [J/n] ' answer || answer="n"
+                case "$answer" in
+                    [nN]*) make_default="0" ;;
+                    *) make_default="1" ;;
+                esac
+            else
+                make_default="0"
+            fi
+        fi
 
-install_topgrade_integration() {
+        if [[ "$make_default" == "1" ]]; then
+            xdg-mime default md-viewer.desktop text/markdown
+            xdg-mime default md-viewer.desktop text/x-markdown
+            printf 'Markdown Viewer wurde als Standardprogramm für Markdown-Dateien festgelegt.\n'
+        else
+            printf 'Markdown Viewer wurde nicht als Standardprogramm für Markdown-Dateien festgelegt.\n'
+        fi
+    fi
+)
+
+install_topgrade_integration() (
     local topgrade_source escaped_path
     install -Dm755 "${BASH_SOURCE[0]}" "$maintain_path"
     escaped_path="${maintain_path//\\/\\\\}"
     escaped_path="${escaped_path//\"/\\\"}"
     topgrade_source="$(mktemp)"
+    trap 'rm -f "$topgrade_source"' EXIT
     printf '[commands]\n"md-viewer" = "\\"%s\\" --update"\n' "$escaped_path" > "$topgrade_source"
     install -Dm644 "$topgrade_source" "$topgrade_path"
-    rm -f "$topgrade_source"
 
     if command -v topgrade >/dev/null 2>&1; then
-        topgrade --dry-run --only custom_commands --custom-commands md-viewer --no-self-update --notify-end never >/dev/null
-        printf 'Die Topgrade-Integration wurde geprüft.\n'
+        if topgrade --dry-run --only custom_commands --custom-commands md-viewer --no-self-update --notify-end never >/dev/null; then
+            printf 'Die Topgrade-Integration wurde geprüft.\n'
+        else
+            printf 'Die Topgrade-Integration wurde eingerichtet; die Prüfung mit Topgrade ist fehlgeschlagen.\n'
+        fi
     else
         printf 'Die Topgrade-Integration wurde eingerichtet; Topgrade war für den Test nicht verfügbar.\n'
     fi
+)
+
+install_chezmoi_integration() {
+    local chezmoi_source
+
+    if ! command -v chezmoi >/dev/null 2>&1; then
+        printf 'Chezmoi wurde nicht gefunden; die Chezmoi-Integration wird übersprungen.\n'
+        return
+    fi
+
+    chezmoi_source="$(chezmoi source-path 2>/dev/null || true)"
+    if [[ -z "$chezmoi_source" || ! -d "$chezmoi_source" || -z "$(ls -A "$chezmoi_source" 2>/dev/null)" ]]; then
+        printf 'Chezmoi ist nicht initialisiert; die Chezmoi-Integration wird übersprungen.\n'
+        return
+    fi
+
+    chezmoi add "$topgrade_path"
+    printf 'Die Topgrade-Konfiguration wurde zu Chezmoi hinzugefügt.\n'
 }
+
+for arg in "$@"; do
+    case "$arg" in
+        install)
+            mode="install"
+            ;;
+        --update)
+            mode="--update"
+            ;;
+        --set-default)
+            default_choice="1"
+            ;;
+        --no-default)
+            default_choice="0"
+            ;;
+        *)
+            fail "Aufruf: $0 [install|--update] [--set-default|--no-default]"
+            ;;
+    esac
+done
+
+if [[ "$mode" == "--update" && -n "$default_choice" ]]; then
+    fail "--set-default/--no-default sind nur zusammen mit install gültig."
+fi
 
 if [[ "$EUID" -eq 0 && "${MD_VIEWER_ALLOW_ROOT:-0}" != "1" ]]; then
     fail "Führe das Skript ohne sudo aus."
@@ -136,12 +203,10 @@ case "$mode" in
         update_viewer
         install_desktop_integration
         install_topgrade_integration
-        printf 'md-viewer ist als Standardprogramm für Markdown eingerichtet.\n'
+        install_chezmoi_integration
+        printf 'md-viewer wurde installiert und eingerichtet.\n'
         ;;
     --update)
         update_viewer
-        ;;
-    *)
-        fail "Aufruf: $0 [--update]"
         ;;
 esac
