@@ -1,4 +1,4 @@
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) ![Shell: Bash](https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnu-bash&logoColor=white) ![Platform: Linux x86_64](https://img.shields.io/badge/platform-Linux%20x86__64-blue) [![Last commit](https://img.shields.io/github/last-commit/Pat9496/install-md-viewer)](https://github.com/Pat9496/install-md-viewer/commits/main)
 
 # install-md-viewer
 
@@ -16,6 +16,7 @@ Installer and updater for [md-viewer](https://github.com/aydiler/md-viewer), a M
 - [Optional integrations](#optional-integrations)
 - [Environment variables](#environment-variables)
 - [License](#license)
+- [Credits](#credits)
 
 ## About
 
@@ -29,6 +30,7 @@ This repository contains the installer script only — not md-viewer itself.
 - Verifies binary integrity via sha256 checksum
 - Installs to `~/.local/bin/md-viewer` with license files
 - Tracks installed version to skip reinstall if already current
+- Installs Noto Sans and DejaVu fallback fonts to `~/.local/share/fonts/md-viewer/` for special and non-Latin character support
 - Optionally registers md-viewer as the default handler for Markdown files (with `xdg-mime`) — asks interactively, or set via `--set-default`/`--no-default`
 - Optional topgrade integration for automated updates
 - Optional chezmoi integration to manage topgrade configuration
@@ -79,11 +81,12 @@ bash install-md-viewer.sh install
 This performs:
 1. Downloads and installs the md-viewer binary
 2. Installs LICENSE and THIRD_PARTY_NOTICES to `~/.local/share/licenses/md-viewer/`
-3. Sets up desktop integration (installs the `.desktop` file, and decides whether to register md-viewer as the default handler for Markdown files — see below)
-4. Sets up topgrade integration (if topgrade is installed)
-5. Sets up chezmoi integration (if chezmoi is initialized)
+3. Installs fallback fonts (Noto Sans and DejaVu) to `~/.local/share/fonts/md-viewer/`
+4. Sets up desktop integration (installs the `.desktop` file, and decides whether to register md-viewer as the default handler for Markdown files — see below)
+5. Sets up topgrade integration (if topgrade is installed)
+6. Sets up chezmoi integration (if chezmoi is initialized)
 
-By default, whether md-viewer becomes the default Markdown handler is decided interactively: if run from a terminal, the script asks `[J/n]`. To skip the prompt, pass one of:
+By default, whether md-viewer becomes the default Markdown handler is decided interactively: if run from a terminal, the script asks `[Y/n]`. To skip the prompt, pass one of:
 
 ```bash
 bash install-md-viewer.sh --set-default   # register as the default handler, no prompt
@@ -103,6 +106,18 @@ bash install-md-viewer.sh --update
 This is useful for updating md-viewer without re-running desktop and integration setup.
 
 ## Optional integrations
+
+### Fallback fonts
+
+The script automatically downloads and installs fallback fonts for special and non-Latin character support:
+- **Noto Sans** (variable-font TTF from Google Fonts)
+- **DejaVu fonts** (full font family from the official DejaVu Fonts release)
+
+Both are installed to `~/.local/share/fonts/md-viewer/` (respecting `XDG_DATA_HOME`). The font cache is refreshed if `fc-cache` is available.
+
+If both fonts are already installed, the step is skipped. If font download fails, a warning is printed to stderr and the installation continues — the fallback fonts improve character coverage but are not required for md-viewer to function.
+
+This step runs only during full installation (`install` mode), not during `--update`.
 
 ### Desktop integration
 
@@ -131,3 +146,10 @@ If chezmoi is not installed or not initialized, this step is skipped.
 ## License
 
 MIT License — see [LICENSE](LICENSE) file.
+
+## Credits
+
+- [md-viewer](https://github.com/aydiler/md-viewer) — the Markdown viewer that this script installs.
+- [topgrade](https://github.com/topgrade-rs/topgrade) — for optional automated update integration.
+- [chezmoi](https://github.com/twpayne/chezmoi) — for optional configuration management integration.
+- Installer script maintained by [Pat9496](https://github.com/Pat9496).

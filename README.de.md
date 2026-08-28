@@ -1,4 +1,4 @@
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) ![Shell: Bash](https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnu-bash&logoColor=white) ![Platform: Linux x86_64](https://img.shields.io/badge/platform-Linux%20x86__64-blue) [![Last commit](https://img.shields.io/github/last-commit/Pat9496/install-md-viewer)](https://github.com/Pat9496/install-md-viewer/commits/main)
 
 # install-md-viewer
 
@@ -16,6 +16,7 @@ Installationsprogramm und Aktualisierungstool für [md-viewer](https://github.co
 - [Optionale Integrationen](#optionale-integrationen)
 - [Umgebungsvariablen](#umgebungsvariablen)
 - [Lizenz](#lizenz)
+- [Danksagung](#danksagung)
 
 ## Über dieses Projekt
 
@@ -29,6 +30,7 @@ Dieses Repository enthält nur das Installationsskript — nicht md-viewer selbs
 - Verifiziert die Integrität der Binärdatei durch Sha256-Checksummen-Überprüfung
 - Installiert in `~/.local/bin/md-viewer` mit Lizenzdateien
 - Verfolgt die installierte Version, um eine Neuinstallation zu überspringen, wenn bereits die aktuelle Version vorhanden ist
+- Installiert Fallback-Schriftarten (Noto Sans und DejaVu) in `~/.local/share/fonts/md-viewer/` für Unterstützung spezieller und nicht-lateinischer Zeichen
 - Registriert md-viewer optional als Standard-Handler für Markdown-Dateien (mit `xdg-mime`) — fragt interaktiv oder wird über `--set-default`/`--no-default` gesteuert
 - Optionale topgrade-Integration für automatische Aktualisierungen
 - Optionale chezmoi-Integration zur Verwaltung der topgrade-Konfiguration
@@ -79,11 +81,12 @@ bash install-md-viewer.sh install
 Dies führt folgende Schritte aus:
 1. Lädt und installiert die md-viewer-Binärdatei herunter
 2. Installiert LICENSE und THIRD_PARTY_NOTICES in `~/.local/share/licenses/md-viewer/`
-3. Richtet Desktop-Integration ein (installiert die `.desktop`-Datei und entscheidet, ob md-viewer als Standard-Handler für Markdown-Dateien registriert wird — siehe unten)
-4. Richtet topgrade-Integration ein (falls topgrade installiert ist)
-5. Richtet chezmoi-Integration ein (falls chezmoi initialisiert ist)
+3. Installiert Fallback-Schriftarten (Noto Sans und DejaVu) in `~/.local/share/fonts/md-viewer/`
+4. Richtet Desktop-Integration ein (installiert die `.desktop`-Datei und entscheidet, ob md-viewer als Standard-Handler für Markdown-Dateien registriert wird — siehe unten)
+5. Richtet topgrade-Integration ein (falls topgrade installiert ist)
+6. Richtet chezmoi-Integration ein (falls chezmoi initialisiert ist)
 
-Standardmäßig wird interaktiv entschieden, ob md-viewer Standard-Handler für Markdown-Dateien wird: Wenn das Skript von einem Terminal aus ausgeführt wird, fragt es `[J/n]`. Um die Nachfrage zu überspringen, kann eines der folgenden Flags übergeben werden:
+Standardmäßig wird interaktiv entschieden, ob md-viewer Standard-Handler für Markdown-Dateien wird: Wenn das Skript von einem Terminal aus ausgeführt wird, fragt es `[Y/n]`. Um die Nachfrage zu überspringen, kann eines der folgenden Flags übergeben werden:
 
 ```bash
 bash install-md-viewer.sh --set-default   # als Standard-Handler registrieren, ohne Nachfrage
@@ -103,6 +106,18 @@ bash install-md-viewer.sh --update
 Dies ist nützlich, um md-viewer zu aktualisieren, ohne Desktop- und Integrations-Setup erneut auszuführen.
 
 ## Optionale Integrationen
+
+### Fallback-Schriftarten
+
+Das Skript lädt automatisch Fallback-Schriftarten für Unterstützung spezieller und nicht-lateinischer Zeichen herunter und installiert diese:
+- **Noto Sans** (Variable-Font-TTF von Google Fonts)
+- **DejaVu fonts** (komplette Schriftartfamilie aus dem offiziellen DejaVu Fonts Release)
+
+Beide werden in `~/.local/share/fonts/md-viewer/` installiert (respektiert `XDG_DATA_HOME`). Der Font-Cache wird aktualisiert, falls `fc-cache` verfügbar ist.
+
+Falls beide Schriftarten bereits installiert sind, wird dieser Schritt übersprungen. Falls der Download fehlschlägt, wird eine Warnung auf stderr gedruckt und die Installation wird fortgesetzt — die Fallback-Schriftarten verbessern die Zeichenabdeckung, sind aber nicht erforderlich, damit md-viewer funktioniert.
+
+Dieser Schritt wird nur bei der vollständigen Installation (`install`-Modus) ausgeführt, nicht bei `--update`.
 
 ### Desktop-Integration
 
@@ -131,3 +146,10 @@ Falls chezmoi nicht installiert oder nicht initialisiert ist, wird dieser Schrit
 ## Lizenz
 
 MIT-Lizenz — siehe [LICENSE](LICENSE)-Datei.
+
+## Danksagung
+
+- [md-viewer](https://github.com/aydiler/md-viewer) — der Markdown-Viewer, den dieses Skript installiert.
+- [topgrade](https://github.com/topgrade-rs/topgrade) — für optionale automatische Aktualisierungsintegration.
+- [chezmoi](https://github.com/twpayne/chezmoi) — für optionale Konfigurationsverwaltungsintegration.
+- Installationsskript gepflegt von [Pat9496](https://github.com/Pat9496).

@@ -11,6 +11,9 @@ maintain_path="${libexec_dir}/md-viewer-maintain"
 version_path="${data_dir}/md-viewer/version"
 desktop_path="${data_dir}/applications/md-viewer.desktop"
 topgrade_path="${config_dir}/topgrade.d/md-viewer.toml"
+font_dir="${data_dir}/fonts/md-viewer"
+noto_font_url="https://raw.githubusercontent.com/google/fonts/main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf"
+dejavu_font_url="https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.tar.bz2"
 mode="install"
 default_choice=""
 
@@ -20,7 +23,7 @@ fail() {
 }
 
 require() {
-    command -v "$1" >/dev/null 2>&1 || fail "$1 wurde nicht gefunden."
+    command -v "$1" >/dev/null 2>&1 || fail "$1 was not found."
 }
 
 latest_tag() {
@@ -40,17 +43,18 @@ update_viewer() (
     require mktemp
     require sha256sum
 
-    [[ "$(uname -s)" == "Linux" ]] || fail "Dieses Skript unterstützt nur Linux."
-    [[ "$(uname -m)" == "x86_64" ]] || fail "Dieses Skript unterstützt nur Linux auf x86_64."
+    [[ "$(uname -s)" == "Linux" ]] || fail "This script only supports Linux."
+    [[ "$(uname -m)" == "x86_64" ]] || fail "This script only supports Linux on x86_64."
 
     local tag version current asset work_dir
     tag="$(latest_tag)"
-    [[ -n "$tag" ]] || fail "Die aktuelle md-viewer-Version konnte nicht ermittelt werden."
+    [[ -n "$tag" ]] || fail "Could not determine the latest md-viewer version."
     version="${tag#v}"
+    printf 'Latest available version: %s\n' "$version"
     current="$(cat "$version_path" 2>/dev/null || true)"
 
     if [[ -x "$binary_path" && "$current" == "$tag" ]]; then
-        printf 'md-viewer %s ist aktuell.\n' "$version"
+        printf 'md-viewer %s is up to date.\n' "$version"
         return
     fi
 
@@ -58,6 +62,7 @@ update_viewer() (
     work_dir="$(mktemp -d)"
     trap 'rm -rf "$work_dir"' EXIT
 
+    printf 'Downloading %s...\n' "$asset"
     curl -fL --retry 3 --retry-delay 2 \
         -o "${work_dir}/${asset}" \
         "https://github.com/${repo}/releases/download/${tag}/${asset}"
@@ -65,32 +70,71 @@ update_viewer() (
         -o "${work_dir}/${asset}.sha256" \
         "https://github.com/${repo}/releases/download/${tag}/${asset}.sha256"
 
+    printf 'Verifying checksum...\n'
     (
         cd "$work_dir"
         sha256sum -c "${asset}.sha256"
     )
 
+    printf 'Extracting archive...\n'
     tar --no-same-owner -xzf "${work_dir}/${asset}" -C "$work_dir"
-    [[ -x "${work_dir}/md-viewer" ]] || fail "Das Release enthält kein ausführbares md-viewer-Programm."
-    [[ -f "${work_dir}/LICENSE" ]] || fail "Das Release enthält keine LICENSE-Datei."
-    [[ -f "${work_dir}/THIRD_PARTY_NOTICES" ]] || fail "Das Release enthält keine THIRD_PARTY_NOTICES-Datei."
+    [[ -x "${work_dir}/md-viewer" ]] || fail "The release does not contain an executable md-viewer binary."
+    [[ -f "${work_dir}/LICENSE" ]] || fail "The release does not contain a LICENSE file."
+    [[ -f "${work_dir}/THIRD_PARTY_NOTICES" ]] || fail "The release does not contain a THIRD_PARTY_NOTICES file."
 
     install -Dm755 "${work_dir}/md-viewer" "$binary_path"
     install -Dm644 "${work_dir}/LICENSE" "${data_dir}/licenses/md-viewer/LICENSE"
     install -Dm644 "${work_dir}/THIRD_PARTY_NOTICES" "${data_dir}/licenses/md-viewer/THIRD_PARTY_NOTICES"
     install -d "$(dirname "$version_path")"
     printf '%s\n' "$tag" > "$version_path"
-    printf 'md-viewer %s wurde installiert.\n' "$version"
+    printf 'md-viewer %s was installed.\n' "$version"
+)
+
+install_fonts() (
+    require curl
+    require tar
+    require install
+    require mktemp
+
+    printf 'Setting up fallback fonts...\n'
+
+    if [[ -f "${font_dir}/NotoSans[wdth,wght].ttf" && -f "${font_dir}/DejaVuSans.ttf" ]]; then
+        printf 'Fallback fonts are already installed.\n'
+        return
+    fi
+
+    local work_dir
+    work_dir="$(mktemp -d)"
+    trap 'rm -rf "$work_dir"' EXIT
+
+    curl -fL --retry 3 --retry-delay 2 \
+        -o "${work_dir}/NotoSans[wdth,wght].ttf" \
+        "$noto_font_url"
+
+    curl -fL --retry 3 --retry-delay 2 \
+        -o "${work_dir}/dejavu-fonts-ttf.tar.bz2" \
+        "$dejavu_font_url"
+    tar -xjf "${work_dir}/dejavu-fonts-ttf.tar.bz2" -C "$work_dir"
+
+    install -Dm644 "${work_dir}/NotoSans[wdth,wght].ttf" "${font_dir}/NotoSans[wdth,wght].ttf"
+    install -Dm644 -t "$font_dir" "${work_dir}"/dejavu-fonts-ttf-2.37/ttf/*.ttf
+
+    if command -v fc-cache >/dev/null 2>&1; then
+        fc-cache -f "$font_dir" >/dev/null 2>&1 || true
+    fi
+
+    printf 'Fallback fonts were installed to %s.\n' "$font_dir"
 )
 
 install_desktop_integration() (
+    printf 'Setting up desktop integration...\n'
     local desktop_source
     desktop_source="$(mktemp)"
     trap 'rm -f "$desktop_source"' EXIT
     cat > "$desktop_source" <<EOF
 [Desktop Entry]
 Name=Markdown Viewer
-Comment=Markdown-Dateien mit Live Reload anzeigen
+Comment=View Markdown files with live reload
 Exec=${binary_path} %f
 Icon=text-markdown
 Terminal=false
@@ -111,7 +155,7 @@ EOF
         if [[ -z "$make_default" ]]; then
             if [[ -t 0 ]]; then
                 local answer
-                read -r -p 'Markdown Viewer als Standardprogramm für Markdown-Dateien festlegen? [J/n] ' answer || answer="n"
+                read -r -p 'Set Markdown Viewer as the default handler for Markdown files? [Y/n] ' answer || answer="n"
                 case "$answer" in
                     [nN]*) make_default="0" ;;
                     *) make_default="1" ;;
@@ -124,14 +168,15 @@ EOF
         if [[ "$make_default" == "1" ]]; then
             xdg-mime default md-viewer.desktop text/markdown
             xdg-mime default md-viewer.desktop text/x-markdown
-            printf 'Markdown Viewer wurde als Standardprogramm für Markdown-Dateien festgelegt.\n'
+            printf 'Markdown Viewer was set as the default handler for Markdown files.\n'
         else
-            printf 'Markdown Viewer wurde nicht als Standardprogramm für Markdown-Dateien festgelegt.\n'
+            printf 'Markdown Viewer was not set as the default handler for Markdown files.\n'
         fi
     fi
 )
 
 install_topgrade_integration() (
+    printf 'Setting up topgrade integration...\n'
     local topgrade_source escaped_path
     install -Dm755 "${BASH_SOURCE[0]}" "$maintain_path"
     escaped_path="${maintain_path//\\/\\\\}"
@@ -143,12 +188,12 @@ install_topgrade_integration() (
 
     if command -v topgrade >/dev/null 2>&1; then
         if topgrade --dry-run --only custom_commands --custom-commands md-viewer --no-self-update --notify-end never >/dev/null; then
-            printf 'Die Topgrade-Integration wurde geprüft.\n'
+            printf 'The topgrade integration was verified.\n'
         else
-            printf 'Die Topgrade-Integration wurde eingerichtet; die Prüfung mit Topgrade ist fehlgeschlagen.\n'
+            printf 'The topgrade integration was set up; the check with topgrade failed.\n'
         fi
     else
-        printf 'Die Topgrade-Integration wurde eingerichtet; Topgrade war für den Test nicht verfügbar.\n'
+        printf 'The topgrade integration was set up; topgrade was not available for testing.\n'
     fi
 )
 
@@ -156,18 +201,18 @@ install_chezmoi_integration() {
     local chezmoi_source
 
     if ! command -v chezmoi >/dev/null 2>&1; then
-        printf 'Chezmoi wurde nicht gefunden; die Chezmoi-Integration wird übersprungen.\n'
+        printf 'Chezmoi was not found; skipping chezmoi integration.\n'
         return
     fi
 
     chezmoi_source="$(chezmoi source-path 2>/dev/null || true)"
     if [[ -z "$chezmoi_source" || ! -d "$chezmoi_source" || -z "$(ls -A "$chezmoi_source" 2>/dev/null)" ]]; then
-        printf 'Chezmoi ist nicht initialisiert; die Chezmoi-Integration wird übersprungen.\n'
+        printf 'Chezmoi is not initialized; skipping chezmoi integration.\n'
         return
     fi
 
     chezmoi add "$topgrade_path"
-    printf 'Die Topgrade-Konfiguration wurde zu Chezmoi hinzugefügt.\n'
+    printf 'The topgrade configuration was added to chezmoi.\n'
 }
 
 for arg in "$@"; do
@@ -185,26 +230,29 @@ for arg in "$@"; do
             default_choice="0"
             ;;
         *)
-            fail "Aufruf: $0 [install|--update] [--set-default|--no-default]"
+            fail "Usage: $0 [install|--update] [--set-default|--no-default]"
             ;;
     esac
 done
 
 if [[ "$mode" == "--update" && -n "$default_choice" ]]; then
-    fail "--set-default/--no-default sind nur zusammen mit install gültig."
+    fail "--set-default/--no-default are only valid together with install."
 fi
 
 if [[ "$EUID" -eq 0 && "${MD_VIEWER_ALLOW_ROOT:-0}" != "1" ]]; then
-    fail "Führe das Skript ohne sudo aus."
+    fail "Run this script without sudo."
 fi
 
 case "$mode" in
     install)
         update_viewer
+        if ! install_fonts; then
+            printf 'Warning: could not install fallback fonts; continuing.\n' >&2
+        fi
         install_desktop_integration
         install_topgrade_integration
         install_chezmoi_integration
-        printf 'md-viewer wurde installiert und eingerichtet.\n'
+        printf 'md-viewer was installed and set up.\n'
         ;;
     --update)
         update_viewer
