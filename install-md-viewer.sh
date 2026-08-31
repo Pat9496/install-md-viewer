@@ -27,7 +27,32 @@ require() {
 }
 
 latest_tag() {
-    curl -fsSL --retry 3 --retry-delay 2 "https://api.github.com/repos/${repo}/releases/latest" \
+    local url token response http_code
+    local -a curl_args
+
+    url="https://api.github.com/repos/${repo}/releases/latest"
+    printf 'Fetching latest release info from %s...\n' "$url" >&2
+
+    token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+    curl_args=(-sSL --retry 3 --retry-delay 2)
+    if [[ -n "$token" ]]; then
+        curl_args+=(-H "Authorization: Bearer ${token}")
+    fi
+
+    if ! response="$(curl "${curl_args[@]}" -w $'\n%{http_code}' "$url")"; then
+        fail "Could not reach the GitHub API at ${url}."
+    fi
+
+    http_code="${response##*$'\n'}"
+    response="${response%$'\n'*}"
+
+    case "$http_code" in
+        200) ;;
+        403) fail "GitHub API request to ${url} failed with HTTP 403 (likely rate limited). Set GITHUB_TOKEN (or GH_TOKEN) to a personal access token to raise the rate limit and try again." ;;
+        *) fail "GitHub API request to ${url} failed with HTTP ${http_code}." ;;
+    esac
+
+    printf '%s' "$response" \
         | grep -o '"tag_name": *"[^"]*"' \
         | head -n 1 \
         | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/'
@@ -43,10 +68,12 @@ update_viewer() (
     require mktemp
     require sha256sum
 
+    printf 'Checking for md-viewer updates...\n'
+
     [[ "$(uname -s)" == "Linux" ]] || fail "This script only supports Linux."
     [[ "$(uname -m)" == "x86_64" ]] || fail "This script only supports Linux on x86_64."
 
-    local tag version current asset work_dir
+    local tag version current asset work_dir asset_url checksum_url
     tag="$(latest_tag)"
     [[ -n "$tag" ]] || fail "Could not determine the latest md-viewer version."
     version="${tag#v}"
@@ -59,16 +86,19 @@ update_viewer() (
     fi
 
     asset="md-viewer-${version}-linux-x86_64.tar.gz"
+    asset_url="https://github.com/${repo}/releases/download/${tag}/${asset}"
+    checksum_url="${asset_url}.sha256"
     work_dir="$(mktemp -d)"
     trap 'rm -rf "$work_dir"' EXIT
 
-    printf 'Downloading %s...\n' "$asset"
+    printf 'Downloading %s from %s...\n' "$asset" "$asset_url"
     curl -fL --retry 3 --retry-delay 2 \
         -o "${work_dir}/${asset}" \
-        "https://github.com/${repo}/releases/download/${tag}/${asset}"
+        "$asset_url"
+    printf 'Downloading checksum from %s...\n' "$checksum_url"
     curl -fL --retry 3 --retry-delay 2 \
         -o "${work_dir}/${asset}.sha256" \
-        "https://github.com/${repo}/releases/download/${tag}/${asset}.sha256"
+        "$checksum_url"
 
     printf 'Verifying checksum...\n'
     (
@@ -107,13 +137,16 @@ install_fonts() (
     work_dir="$(mktemp -d)"
     trap 'rm -rf "$work_dir"' EXIT
 
+    printf 'Downloading Noto Sans font from %s...\n' "$noto_font_url"
     curl -fL --retry 3 --retry-delay 2 \
         -o "${work_dir}/NotoSans[wdth,wght].ttf" \
         "$noto_font_url"
 
+    printf 'Downloading DejaVu fonts from %s...\n' "$dejavu_font_url"
     curl -fL --retry 3 --retry-delay 2 \
         -o "${work_dir}/dejavu-fonts-ttf.tar.bz2" \
         "$dejavu_font_url"
+    printf 'Extracting DejaVu fonts...\n'
     tar -xjf "${work_dir}/dejavu-fonts-ttf.tar.bz2" -C "$work_dir"
 
     install -Dm644 "${work_dir}/NotoSans[wdth,wght].ttf" "${font_dir}/NotoSans[wdth,wght].ttf"
@@ -199,6 +232,8 @@ install_topgrade_integration() (
 
 install_chezmoi_integration() {
     local chezmoi_source
+
+    printf 'Setting up chezmoi integration...\n'
 
     if ! command -v chezmoi >/dev/null 2>&1; then
         printf 'Chezmoi was not found; skipping chezmoi integration.\n'

@@ -27,6 +27,7 @@ Dieses Repository enthält nur das Installationsskript — nicht md-viewer selbs
 ## Funktionen
 
 - Lädt das neueste md-viewer-Release von GitHub herunter
+- Unterstützt GitHub personal access tokens zur Erhöhung der GitHub-API-Rate-Limits und Vermeidung von Rate-Limit-Fehlern
 - Verifiziert die Integrität der Binärdatei durch Sha256-Checksummen-Überprüfung
 - Installiert in `~/.local/bin/md-viewer` mit Lizenzdateien
 - Verfolgt die installierte Version, um eine Neuinstallation zu überspringen, wenn bereits die aktuelle Version vorhanden ist
@@ -142,6 +143,8 @@ Falls chezmoi nicht installiert oder nicht initialisiert ist, wird dieser Schrit
 - `XDG_DATA_HOME` — Verzeichnis für Anwendungsdatendateien (Standard: `~/.local/share`)
 - `XDG_CONFIG_HOME` — Verzeichnis für Konfigurationsdateien (Standard: `~/.config`)
 - `MD_VIEWER_ALLOW_ROOT` — Auf `1` setzen, um das Skript als root auszuführen (Standard: `0`, Skript weigert sich, als root zu laufen, falls nicht gesetzt)
+- `GITHUB_TOKEN` — GitHub personal access token zur API-Authentifizierung; erhöht das GitHub-API-Rate-Limit von 60 auf 5.000 Anfragen pro Stunde, um Rate-Limit-Fehler zu vermeiden (optional)
+- `GH_TOKEN` — Alternative zu `GITHUB_TOKEN`; wird verwendet, falls `GITHUB_TOKEN` nicht gesetzt ist (optional)
 
 ## Lizenz
 
