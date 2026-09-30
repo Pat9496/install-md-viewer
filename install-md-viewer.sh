@@ -73,7 +73,9 @@ update_viewer() (
     [[ "$(uname -s)" == "Linux" ]] || fail "This script only supports Linux."
     [[ "$(uname -m)" == "x86_64" ]] || fail "This script only supports Linux on x86_64."
 
-    local tag version current asset work_dir asset_url checksum_url
+    local tag version current asset work_dir asset_url checksum_url binary_tmp version_tmp
+    binary_tmp=""
+    version_tmp=""
     tag="$(latest_tag)"
     [[ -n "$tag" ]] || fail "Could not determine the latest md-viewer version."
     version="${tag#v}"
@@ -89,7 +91,7 @@ update_viewer() (
     asset_url="https://github.com/${repo}/releases/download/${tag}/${asset}"
     checksum_url="${asset_url}.sha256"
     work_dir="$(mktemp -d)"
-    trap 'rm -rf "$work_dir"' EXIT
+    trap 'rm -rf "$work_dir"; [[ -n "$binary_tmp" ]] && rm -f "$binary_tmp"; [[ -n "$version_tmp" ]] && rm -f "$version_tmp"' EXIT
 
     printf 'Downloading %s from %s...\n' "$asset" "$asset_url"
     curl -fL --retry 3 --retry-delay 2 \
@@ -112,11 +114,21 @@ update_viewer() (
     [[ -f "${work_dir}/LICENSE" ]] || fail "The release does not contain a LICENSE file."
     [[ -f "${work_dir}/THIRD_PARTY_NOTICES" ]] || fail "The release does not contain a THIRD_PARTY_NOTICES file."
 
-    install -Dm755 "${work_dir}/md-viewer" "$binary_path"
+    install -d "$bin_dir"
+    binary_tmp="$(mktemp "${bin_dir}/md-viewer.XXXXXX")"
+    install -m755 "${work_dir}/md-viewer" "$binary_tmp"
+    mv -f "$binary_tmp" "$binary_path"
+    binary_tmp=""
+
     install -Dm644 "${work_dir}/LICENSE" "${data_dir}/licenses/md-viewer/LICENSE"
     install -Dm644 "${work_dir}/THIRD_PARTY_NOTICES" "${data_dir}/licenses/md-viewer/THIRD_PARTY_NOTICES"
+
     install -d "$(dirname "$version_path")"
-    printf '%s\n' "$tag" > "$version_path"
+    version_tmp="$(mktemp "$(dirname "$version_path")/version.XXXXXX")"
+    printf '%s\n' "$tag" > "$version_tmp"
+    mv -f "$version_tmp" "$version_path"
+    version_tmp=""
+
     printf 'md-viewer %s was installed.\n' "$version"
 )
 
@@ -128,7 +140,8 @@ install_fonts() (
 
     printf 'Setting up fallback fonts...\n'
 
-    if [[ -f "${font_dir}/NotoSans[wdth,wght].ttf" && -f "${font_dir}/DejaVuSans.ttf" ]]; then
+    local marker_path="${font_dir}/.installed"
+    if [[ -f "$marker_path" ]]; then
         printf 'Fallback fonts are already installed.\n'
         return
     fi
@@ -156,6 +169,7 @@ install_fonts() (
         fc-cache -f "$font_dir" >/dev/null 2>&1 || true
     fi
 
+    : > "$marker_path"
     printf 'Fallback fonts were installed to %s.\n' "$font_dir"
 )
 
